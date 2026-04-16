@@ -38,14 +38,17 @@ def asignar_jefe(asignacion: schemas.AsignarJefe, db: Session = Depends(get_db))
 
 @router.get("/resultados")
 def obtener_resultados(db: Session = Depends(get_db)):
-    # Puede ser publico o admin, lo dejamos sin admin_dependency en las defs del router si se requiere publico
-    # Pero para este ejemplo, vamos a buscar todos los votos.
     votos_agrupados = db.query(
+        models.Candidato.id,
         models.Candidato.nombre,
+        models.Candidato.sigla,
+        models.Candidato.cargo,
         func.count(models.Voto.id).label("total_votos")
-    ).join(models.Voto, models.Voto.candidato_id == models.Candidato.id).group_by(models.Candidato.id).all()
+    ).outerjoin(models.Voto, models.Voto.candidato_id == models.Candidato.id
+    ).group_by(models.Candidato.id).order_by(func.count(models.Voto.id).desc()).all()
     
-    return [{"candidato": v.nombre, "votos": v.total_votos} for v in votos_agrupados]
+    return [{"candidato": v.nombre, "sigla": v.sigla, "cargo": v.cargo, "votos": v.total_votos} for v in votos_agrupados]
+
 
 @router.post("/publicar-resultados", dependencies=[admin_dependency])
 def publicar_resultados(eleccion_id: int, db: Session = Depends(get_db)):

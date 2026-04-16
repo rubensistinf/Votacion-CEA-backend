@@ -6,7 +6,7 @@ from datetime import timedelta
 from database import get_db
 import models
 import schemas
-from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
 
 router = APIRouter(tags=["Auth"])
 
@@ -24,3 +24,39 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
         data={"sub": user.correo, "rol": user.rol}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/login-ci", response_model=schemas.Token)
+def login_con_ci(datos: schemas.LoginCI, db: Session = Depends(get_db)):
+    """Login especial para votantes usando solo su número de carnet (CI)."""
+    # Buscar el votante por CI
+    votante = db.query(models.Votante).filter(models.Votante.ci == datos.ci).first()
+    if not votante:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Número de carnet no registrado en el padrón.",
+        )
+    # Buscar el usuario asociado
+    usuario = db.query(models.Usuario).filter(models.Usuario.correo == votante.correo).first()
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Cuenta de acceso no encontrada. Contacte a la secretaría.",
+        )
+    # Verificar que la contraseña (el CI) sea válida
+    if not verify_password(datos.ci, usuario.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Error de autenticación. Contacte a la secretaría.",
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": usuario.correo, "rol": usuario.rol}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/candidatos/publicos", response_model=list[schemas.CandidatoPublico])
+def candidatos_publicos(db: Session = Depends(get_db)):
+    """Endpoint público: muestra candidatos sin requerir autenticación."""
+    return db.query(models.Candidato).all()

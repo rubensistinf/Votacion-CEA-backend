@@ -7,6 +7,19 @@ from auth import require_role, get_current_user
 router = APIRouter(prefix="/votante", tags=["Votante"])
 votante_dependency = Depends(require_role(["votante"]))
 
+@router.get("/mi-info", dependencies=[votante_dependency])
+def mi_info(current_user: models.Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+    votante = db.query(models.Votante).filter(models.Votante.correo == current_user.correo).first()
+    if not votante:
+        raise HTTPException(status_code=404, detail="Votante no encontrado")
+    return {
+        "nombre": votante.nombre,
+        "ci": votante.ci,
+        "correo": votante.correo,
+        "habilitado": votante.habilitado,
+        "ha_votado": votante.ha_votado
+    }
+
 @router.get("/candidatos", response_model=list[schemas.CandidatoResponse], dependencies=[votante_dependency])
 def listar_candidatos(db: Session = Depends(get_db)):
     return db.query(models.Candidato).all()

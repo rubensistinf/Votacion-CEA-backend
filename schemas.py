@@ -48,18 +48,37 @@ class VotanteResponse(BaseModel):
 
 class CandidatoCreate(BaseModel):
     nombre: str
+    sigla: Optional[str] = None
     cargo: str
+    frente: Optional[str] = None
     descripcion: Optional[str] = None
     eleccion_id: int
+    imagen_base64: Optional[str] = None
 
 class CandidatoResponse(BaseModel):
     id: int
     eleccion_id: int
     nombre: str
+    sigla: Optional[str] = None
     cargo: str
+    frente: Optional[str] = None
     descripcion: Optional[str] = None
+    imagen_base64: Optional[str] = None
     class Config:
         from_attributes = True
+
+class CandidatoPublico(BaseModel):
+    id: int
+    nombre: str
+    sigla: Optional[str] = None
+    cargo: str
+    frente: Optional[str] = None
+    imagen_base64: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class LoginCI(BaseModel):
+    ci: str
 
 class MesaCreate(BaseModel):
     eleccion_id: int

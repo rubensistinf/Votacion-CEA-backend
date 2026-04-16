@@ -38,8 +38,11 @@ class Candidato(Base):
     id = Column(Integer, primary_key=True, index=True)
     eleccion_id = Column(Integer, ForeignKey("elecciones.id"))
     nombre = Column(String)
+    sigla = Column(String, nullable=True)  # ej: "MAS", "FRENTE UNIDO"
     cargo = Column(String)
+    frente = Column(String, nullable=True)  # Nombre del frente de campaña
     descripcion = Column(String, nullable=True)
+    imagen_base64 = Column(String, nullable=True)
 
 class Votante(Base):
     __tablename__ = "votantes"

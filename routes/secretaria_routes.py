@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from auth import require_role, get_password_hash
+from fastapi import UploadFile, File
+import openpyxl
+from io import BytesIO
 
 router = APIRouter(prefix="/secretaria", tags=["Secretaria"])
 secretaria_dependency = Depends(require_role(["admin", "secretaria"]))
@@ -14,10 +17,17 @@ def inscribir_votante(votante: schemas.VotanteCreate, db: Session = Depends(get_
     if existe:
         raise HTTPException(status_code=400, detail="El votante ya está registrado.")
     
-    # Generar correo base: nombre.apellido@ceapailon.com
-    nombre_limpio = votante.nombre.strip().lower().replace(" ", ".")
-    correo = f"{nombre_limpio}@ceapailon.com"
+    # Generar correo base: nombre.apellidopaterno@cea.com
+    partes = votante.nombre.strip().lower().split()
+    if len(partes) >= 2:
+        correo = f"{partes[0]}.{partes[1]}@cea.com"
+    else:
+        correo = f"{partes[0]}@cea.com"
     
+    # Manejar correos duplicados adjuntando C.I. si es necesario
+    if db.query(models.Votante).filter(models.Votante.correo == correo).first():
+        correo = f"{correo.split('@')[0]}{votante.ci}@cea.com"
+
     db_votante = models.Votante(ci=votante.ci, nombre=votante.nombre, correo=correo)
     db.add(db_votante)
     
@@ -30,10 +40,91 @@ def inscribir_votante(votante: schemas.VotanteCreate, db: Session = Depends(get_
     db.refresh(db_votante)
     return db_votante
 
+@router.get("/votantes", dependencies=[secretaria_dependency])
+def listar_votantes(db: Session = Depends(get_db)):
+    votantes = db.query(models.Votante).all()
+    return [{"ci": v.ci, "nombre": v.nombre, "correo": v.correo, "habilitado": v.habilitado, "ha_votado": v.ha_votado} for v in votantes]
+
 @router.post("/candidatos", response_model=schemas.CandidatoResponse, dependencies=[secretaria_dependency])
+
 def registrar_candidato(candidato: schemas.CandidatoCreate, db: Session = Depends(get_db)):
     db_candidato = models.Candidato(**candidato.model_dump())
     db.add(db_candidato)
     db.commit()
     db.refresh(db_candidato)
     return db_candidato
+
+@router.get("/votantes/buscar/{ci}", dependencies=[secretaria_dependency])
+def buscar_votante(ci: str, db: Session = Depends(get_db)):
+    votante = db.query(models.Votante).filter(models.Votante.ci == ci).first()
+    if not votante:
+        raise HTTPException(status_code=404, detail="No registrado")
+    return {"ci": votante.ci, "nombre": votante.nombre, "correo": votante.correo}
+
+@router.post("/inscribir-lote", dependencies=[secretaria_dependency])
+async def inscribir_lote(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(('.xlsx')):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel .xlsx")
+    
+    contents = await file.read()
+    wb = openpyxl.load_workbook(filename=BytesIO(contents), data_only=True)
+    sheet = wb.active
+    
+    registrados = 0
+    errores = 0
+    
+    # Suponiendo columnas: "CI", "Nombres", "Apellidos"
+    # Tomaremos la primera fila como header
+    headers = [str(cell.value).strip().lower() for cell in sheet[1] if cell.value]
+    
+    ci_idx = -1
+    nom_idx = -1
+    ape_idx = -1
+    
+    for i, h in enumerate(headers):
+        if 'ci' in h: ci_idx = i
+        elif 'nombre' in h: nom_idx = i
+        elif 'apellido' in h: ape_idx = i
+        
+    if ci_idx == -1 or (nom_idx == -1 and ape_idx == -1):
+        raise HTTPException(status_code=400, detail="Formato inválido. Debe tener columnas: CI, Nombres, Apellidos")
+        
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if not row[ci_idx]:
+            continue
+            
+        ci = str(row[ci_idx]).strip()
+        nombres = str(row[nom_idx] or "").strip()
+        apellidos = str(row[ape_idx] or "") if ape_idx != -1 else ""
+        nombre_completo = f"{nombres} {apellidos}".strip()
+        
+        # Validar si existe
+        if db.query(models.Votante).filter(models.Votante.ci == ci).first():
+            errores += 1
+            continue
+            
+        partes = nombres.lower().split()
+        ape_partes = apellidos.lower().split()
+        
+        p1 = partes[0] if partes else ""
+        p2 = ape_partes[0] if ape_partes else ""
+        
+        if p1 and p2:
+            correo = f"{p1}.{p2}@cea.com"
+        else:
+            correo = f"{p1 or p2}@cea.com"
+            
+        # Manejar correos duplicados
+        if db.query(models.Votante).filter(models.Votante.correo == correo).first():
+            correo = f"{correo.split('@')[0]}{ci}@cea.com"
+            
+        db_votante = models.Votante(ci=ci, nombre=nombre_completo, correo=correo)
+        db.add(db_votante)
+        
+        pwd_hash = get_password_hash(ci)
+        db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
+        db.add(db_usuario)
+        registrados += 1
+        
+    db.commit()
+    return {"msg": f"Procesamiento listo", "registrados": registrados, "omitidos": errores}
