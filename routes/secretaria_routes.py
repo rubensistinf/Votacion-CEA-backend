@@ -36,8 +36,10 @@ def inscribir_votante(votante: schemas.VotanteCreate, request: Request, db: Sess
     db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
     db.add(db_usuario)
     
+    db.commit()
     db.refresh(db_votante)
     log_audit(db, user.id, "INSCRIBIR_VOTANTE", f"Inscribió individual: {db_votante.nombre} (CI: {db_votante.ci})", request)
+    db.commit()
     return db_votante
 
 @router.get("/votantes", dependencies=[secretaria_dependency])
@@ -73,8 +75,10 @@ def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db
             db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
             db.add(db_usuario)
     
+    db.commit()
     db.refresh(db_candidato)
     log_audit(db, user.id, "REGISTRAR_CANDIDATO", f"Candidato: {db_candidato.nombre} para elección {db_candidato.eleccion_id}", request)
+    db.commit()
     return db_candidato
 
 @router.get("/votantes/buscar/{ci}", dependencies=[secretaria_dependency])
@@ -114,9 +118,11 @@ def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db
         pwd_hash = get_password_hash(ci)
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
+        registrados += 1
         
     db.commit()
     log_audit(db, user.id, "INSCRIBIR_LOTE_TEXTO", f"Registró {registrados} votantes (omitió {errores} duplicados).", request)
+    db.commit()
     return {"registrados": registrados, "omitidos": errores}
 
 @router.post("/inscribir-lote")

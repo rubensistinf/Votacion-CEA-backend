@@ -25,6 +25,7 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
         data={"sub": user.correo, "rol": user.rol}, expires_delta=access_token_expires
     )
     log_audit(db, user.id, "LOGIN", f"Ingreso exitoso ({user.rol})", request)
+    db.commit() # Asegurar log
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -56,6 +57,7 @@ def login_con_ci(datos: schemas.LoginCI, request: Request, db: Session = Depends
         data={"sub": usuario.correo, "rol": usuario.rol}, expires_delta=access_token_expires
     )
     log_audit(db, usuario.id, "LOGIN_CI", f"Ingreso de votante CI: {datos.ci}", request)
+    db.commit() # Asegurar log
     return {"access_token": access_token, "token_type": "bearer"}
 
 

@@ -52,4 +52,5 @@ def validar_votante(ci: str, request: Request, db: Session = Depends(get_db), cu
     votante.habilitado = True
     db.commit()
     log_audit(db, current_user.id, "VALIDAR_VOTANTE", f"Habilitó a {votante.nombre} (CI: {votante.ci})", request)
+    db.commit() # Asegurar persistencia del log
     return {"msg": "✅ Votante habilitado exitosamente", "correo_login": votante.correo}

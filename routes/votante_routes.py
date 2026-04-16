@@ -68,6 +68,7 @@ def emitir_voto(voto: schemas.VotoCreate, request: Request, current_user: models
     votante.ha_votado = True
     db.commit()
     log_audit(db, current_user.id, "VOTO_EMITIDO", f"Elección ID: {voto.eleccion_id}", request)
+    db.commit()
     return {"msg": "Voto registrado exitosamente.", "eleccion": eleccion.nombre}
 
 @router.get("/estado-eleccion")

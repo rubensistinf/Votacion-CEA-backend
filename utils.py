@@ -14,4 +14,5 @@ def log_audit(db: Session, user_id: int, action: str, detail: str, request: Requ
         ip_address=ip
     )
     db.add(db_log)
-    db.commit()
+    # Ya no hacemos commit aquí para no interferir con la transacción principal del endpoint
+

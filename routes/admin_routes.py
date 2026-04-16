@@ -12,12 +12,12 @@ admin_dependency = Depends(require_role(["admin"]))
 
 # ─── ELECCIONES ───
 @router.post("/elecciones", response_model=schemas.EleccionResponse)
-def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     db_eleccion = models.Eleccion(nombre=eleccion.nombre, activa=True)
     db.add(db_eleccion)
     db.commit()
     db.refresh(db_eleccion)
     log_audit(db, admin.id, "CREAR_ELECCION", f"Nombre: {db_eleccion.nombre} (ID: {db_eleccion.id})", request)
+    db.commit() # Asegurar que el log se guarde
     return db_eleccion
 
 @router.get("/elecciones", response_model=list[schemas.EleccionResponse], dependencies=[admin_dependency])
@@ -170,7 +170,7 @@ def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, request: Request, db: Sess
 
     db.commit()
     log_audit(db, admin.id, "ASIGNAR_JEFE", f"Asignó a {votante.nombre} (CI: {votante.ci}) a Mesa {mesa_asignar.numero}", request)
-
+    db.commit() # Asegurar que el log se guarde
     return {
         "msg": f"✅ {votante.nombre} asignado automáticamente como Jefe de la Mesa Nº {mesa_asignar.numero}.",
         "jefe": votante.nombre,
@@ -193,6 +193,7 @@ def eliminar_mesa(mesa_id: int, request: Request, db: Session = Depends(get_db),
     db.delete(mesa)
     db.commit()
     log_audit(db, admin.id, "ELIMINAR_MESA", f"Eliminó Mesa {mesa.numero} (ID: {mesa_id})", request)
+    db.commit() # Asegurar que el log se guarde
     return {"msg": f"Mesa {mesa.numero} eliminada exitosamente. Los votantes asignados a ella deberán ser redistribuidos."}
 
 @router.post("/distribuir-mesas/{eleccion_id}")
