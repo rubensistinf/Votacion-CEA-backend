@@ -229,15 +229,16 @@ def distribuir_mesas(eleccion_id: int, db: Session = Depends(get_db)):
 
 # ─── RESULTADOS ───
 @router.get("/resultados")
-def obtener_resultados(db: Session = Depends(get_db)):
+def obtener_resultados(eleccion_id: int, db: Session = Depends(get_db)):
     votos_agrupados = db.query(
         models.Candidato.id,
         models.Candidato.nombre,
         models.Candidato.sigla,
         models.Candidato.cargo,
         func.count(models.Voto.id).label("total_votos")
-    ).outerjoin(models.Voto, models.Voto.candidato_id == models.Candidato.id
-    ).group_by(models.Candidato.id).order_by(func.count(models.Voto.id).desc()).all()
+    ).outerjoin(models.Voto, (models.Voto.candidato_id == models.Candidato.id)) \
+     .filter(models.Candidato.eleccion_id == eleccion_id) \
+     .group_by(models.Candidato.id).order_by(func.count(models.Voto.id).desc()).all()
     return [{"candidato": v.nombre, "sigla": v.sigla, "cargo": v.cargo, "votos": v.total_votos} for v in votos_agrupados]
 
 @router.post("/publicar-resultados", dependencies=[admin_dependency])
@@ -250,12 +251,28 @@ def publicar_resultados(eleccion_id: int, db: Session = Depends(get_db)):
     return {"msg": "Resultados publicados, elección cerrada."}
 
 @router.get("/stats", dependencies=[admin_dependency])
-def obtener_estadisticas(db: Session = Depends(get_db)):
+def obtener_estadisticas(eleccion_id: int = None, db: Session = Depends(get_db)):
+    # Totales generales del sistema
     total_votantes = db.query(func.count(models.Votante.id)).scalar()
-    total_habilitados = db.query(func.count(models.Votante.id)).filter(models.Votante.habilitado == True).scalar()
-    total_votos = db.query(func.count(models.Voto.id)).scalar()
-    total_candidatos = db.query(func.count(models.Candidato.id)).scalar()
-    total_mesas = db.query(func.count(models.Mesa.id)).scalar()
+    
+    # Filtro opcional por elección
+    f_votos = db.query(func.count(models.Voto.id))
+    f_cand = db.query(func.count(models.Candidato.id))
+    f_mesa = db.query(func.count(models.Mesa.id))
+    
+    if eleccion_id:
+        total_votos = f_votos.filter(models.Voto.eleccion_id == eleccion_id).scalar()
+        total_candidatos = f_cand.filter(models.Candidato.eleccion_id == eleccion_id).scalar()
+        total_mesas = f_mesa.filter(models.Mesa.eleccion_id == eleccion_id).scalar()
+        total_habilitados = db.query(func.count(models.AsignacionMesa.id)).filter(models.AsignacionMesa.mesa_id.in_(
+            db.query(models.Mesa.id).filter(models.Mesa.eleccion_id == eleccion_id)
+        )).scalar()
+    else:
+        total_votos = f_votos.scalar()
+        total_candidatos = f_cand.scalar()
+        total_mesas = f_mesa.scalar()
+        total_habilitados = db.query(func.count(models.Votante.id)).filter(models.Votante.habilitado == True).scalar()
+
     return {
         "total_votantes": total_votantes,
         "total_habilitados": total_habilitados,
