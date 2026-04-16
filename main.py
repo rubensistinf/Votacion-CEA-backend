@@ -37,12 +37,8 @@ def init_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup actions
-    from migrate_db import migrate
-    try:
-        migrate()
-    except Exception as e:
-        print(f"⚠️ Error en la migración inicial: {e}")
+    # Ya no ejecutamos migración aquí para que Render arranque al instante
+    # El admin puede ejecutarla manualmente con el botón "Reparar"
     init_db()
     yield
     # Shutdown actions
