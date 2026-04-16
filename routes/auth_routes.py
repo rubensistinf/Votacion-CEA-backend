@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
@@ -7,11 +7,12 @@ from database import get_db
 import models
 import schemas
 from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from utils import log_audit
 
 router = APIRouter(tags=["Auth"])
 
 @router.post("/login", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.Usuario).filter(models.Usuario.correo == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -23,11 +24,12 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     access_token = create_access_token(
         data={"sub": user.correo, "rol": user.rol}, expires_delta=access_token_expires
     )
+    log_audit(db, user.id, "LOGIN", f"Ingreso exitoso ({user.rol})", request)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/login-ci", response_model=schemas.Token)
-def login_con_ci(datos: schemas.LoginCI, db: Session = Depends(get_db)):
+def login_con_ci(datos: schemas.LoginCI, request: Request, db: Session = Depends(get_db)):
     """Login especial para votantes usando solo su número de carnet (CI)."""
     # Buscar el votante por CI
     votante = db.query(models.Votante).filter(models.Votante.ci == datos.ci).first()
@@ -53,6 +55,7 @@ def login_con_ci(datos: schemas.LoginCI, db: Session = Depends(get_db)):
     access_token = create_access_token(
         data={"sub": usuario.correo, "rol": usuario.rol}, expires_delta=access_token_expires
     )
+    log_audit(db, usuario.id, "LOGIN_CI", f"Ingreso de votante CI: {datos.ci}", request)
     return {"access_token": access_token, "token_type": "bearer"}
 
 

@@ -104,3 +104,14 @@ class AsignarJefeCI(BaseModel):
 class VotoCreate(BaseModel):
     candidato_id: int
     eleccion_id: int
+
+class AuditLogResponse(BaseModel):
+    id: int
+    usuario_id: Optional[int]
+    accion: str
+    detalle: str
+    ip_address: Optional[str]
+    timestamp: datetime
+    class Config:
+        from_attributes = True
+

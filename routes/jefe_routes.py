@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from auth import require_role
+from utils import log_audit
 
 router = APIRouter(prefix="/jefe", tags=["Jefe de Mesa"])
 jefe_dependency = Depends(require_role(["admin", "jefe"]))
@@ -26,7 +27,7 @@ def consultar_votante(ci: str, db: Session = Depends(get_db), current_user: mode
     }
 
 @router.post("/validar-votante")
-def validar_votante(ci: str, db: Session = Depends(get_db), current_user: models.Usuario = Depends(require_role(["admin", "jefe"]))):
+def validar_votante(ci: str, request: Request, db: Session = Depends(get_db), current_user: models.Usuario = Depends(require_role(["admin", "jefe"]))):
     votante = db.query(models.Votante).filter(models.Votante.ci == ci).first()
     if not votante:
         raise HTTPException(status_code=404, detail="Votante no encontrado")
@@ -50,4 +51,5 @@ def validar_votante(ci: str, db: Session = Depends(get_db), current_user: models
         
     votante.habilitado = True
     db.commit()
+    log_audit(db, current_user.id, "VALIDAR_VOTANTE", f"Habilitó a {votante.nombre} (CI: {votante.ci})", request)
     return {"msg": "✅ Votante habilitado exitosamente", "correo_login": votante.correo}

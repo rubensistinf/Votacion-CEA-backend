@@ -1,21 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from auth import require_role
 from sqlalchemy import func
 import random
+from utils import log_audit
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 admin_dependency = Depends(require_role(["admin"]))
 
 # ─── ELECCIONES ───
 @router.post("/elecciones", response_model=schemas.EleccionResponse, dependencies=[admin_dependency])
-def crear_eleccion(eleccion: schemas.EleccionCreate, db: Session = Depends(get_db)):
+def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
     db_eleccion = models.Eleccion(nombre=eleccion.nombre, activa=True)
     db.add(db_eleccion)
     db.commit()
     db.refresh(db_eleccion)
+    log_audit(db, admin.id, "CREAR_ELECCION", f"Nombre: {db_eleccion.nombre} (ID: {db_eleccion.id})", request)
     return db_eleccion
 
 @router.get("/elecciones", response_model=list[schemas.EleccionResponse], dependencies=[admin_dependency])
@@ -31,8 +33,8 @@ def toggle_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"msg": f"Elección {'abierta' if eleccion.activa else 'cerrada'}.", "activa": eleccion.activa}
 
-@router.delete("/elecciones/{eleccion_id}", dependencies=[admin_dependency])
-def eliminar_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
+@router.delete("/elecciones/{eleccion_id}")
+def eliminar_eleccion(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
     eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == eleccion_id).first()
     if not eleccion:
         raise HTTPException(status_code=404, detail="Elección no encontrada")
@@ -57,8 +59,11 @@ def eliminar_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
     db.query(models.Usuario).filter(models.Usuario.rol == "jefe").update({"rol": "votante"})
     
     # 6. Finalmente borrar la elección
+    nombre_old = eleccion.nombre
     db.delete(eleccion)
     db.commit()
+    
+    log_audit(db, admin.id, "BORRAR_ELECCION", f"Eliminó elección '{nombre_old}' (ID: {eleccion_id}) y reinició padrón.", request)
     
     return {"msg": "🗑️ Elección eliminada drásticamente. Todo reiniciado al estado inicial."}
 
@@ -188,8 +193,8 @@ def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
     
     return {"msg": f"Mesa {mesa.numero} eliminada exitosamente. Los votantes asignados a ella deberán ser redistribuidos."}
 
-@router.post("/distribuir-mesas/{eleccion_id}", dependencies=[admin_dependency])
-def distribuir_mesas(eleccion_id: int, db: Session = Depends(get_db)):
+@router.post("/distribuir-mesas/{eleccion_id}")
+def distribuir_mesas(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
     """Distribuye por sorteo aleatorio todos los votantes sin mesa entre las mesas disponibles."""
     mesas = db.query(models.Mesa).filter(models.Mesa.eleccion_id == eleccion_id).all()
     if not mesas:
@@ -220,6 +225,7 @@ def distribuir_mesas(eleccion_id: int, db: Session = Depends(get_db)):
 
     db.commit()
     resumen_str = " | ".join([f"Mesa {k}: {v} votantes" for k, v in sorted(resumen.items())])
+    log_audit(db, admin.id, "SORTEO_MESAS", f"Distribuyó {asignados} votantes en {len(mesas)} mesas.", request)
     return {
         "msg": f"✅ Sorteo completado. {asignados} votantes distribuidos aleatoriamente en {len(mesas)} mesa(s).",
         "distribuidos": asignados,
@@ -281,3 +287,9 @@ def obtener_estadisticas(eleccion_id: int = None, db: Session = Depends(get_db))
         "total_mesas": total_mesas,
         "participacion": round((total_votos / total_habilitados * 100), 1) if total_habilitados else 0
     }
+
+@router.get("/auditoria", response_model=list[schemas.AuditLogResponse], dependencies=[admin_dependency])
+def obtener_auditoria(db: Session = Depends(get_db)):
+    """Retorna los últimos 200 logs de auditoria para revisión administrativa."""
+    return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).limit(200).all()
+

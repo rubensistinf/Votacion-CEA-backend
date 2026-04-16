@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from auth import require_role, get_password_hash
-from fastapi import UploadFile, File
+from utils import log_audit
 import openpyxl
 from io import BytesIO
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/secretaria", tags=["Secretaria"])
 secretaria_dependency = Depends(require_role(["admin", "secretaria"]))
 
 @router.post("/usuarios", response_model=schemas.VotanteResponse, dependencies=[secretaria_dependency])
-def inscribir_votante(votante: schemas.VotanteCreate, db: Session = Depends(get_db)):
+def inscribir_votante(votante: schemas.VotanteCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
     # Validar si ya existe
     existe = db.query(models.Votante).filter(models.Votante.ci == votante.ci).first()
     if existe:
@@ -36,8 +36,8 @@ def inscribir_votante(votante: schemas.VotanteCreate, db: Session = Depends(get_
     db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
     db.add(db_usuario)
     
-    db.commit()
     db.refresh(db_votante)
+    log_audit(db, user.id, "INSCRIBIR_VOTANTE", f"Inscribió individual: {db_votante.nombre} (CI: {db_votante.ci})", request)
     return db_votante
 
 @router.get("/votantes", dependencies=[secretaria_dependency])
@@ -46,7 +46,7 @@ def listar_votantes(db: Session = Depends(get_db)):
     return [{"ci": v.ci, "nombre": v.nombre, "correo": v.correo, "habilitado": v.habilitado, "ha_votado": v.ha_votado} for v in votantes]
 
 @router.post("/candidatos", response_model=schemas.CandidatoResponse, dependencies=[secretaria_dependency])
-def registrar_candidato(candidato: schemas.CandidatoCreate, db: Session = Depends(get_db)):
+def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
     db_candidato = models.Candidato(**candidato.model_dump(exclude={'ci_representante'}))
     db.add(db_candidato)
     db.flush()  # Para obtener el id del candidato
@@ -73,8 +73,8 @@ def registrar_candidato(candidato: schemas.CandidatoCreate, db: Session = Depend
             db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
             db.add(db_usuario)
     
-    db.commit()
     db.refresh(db_candidato)
+    log_audit(db, user.id, "REGISTRAR_CANDIDATO", f"Candidato: {db_candidato.nombre} para elección {db_candidato.eleccion_id}", request)
     return db_candidato
 
 @router.get("/votantes/buscar/{ci}", dependencies=[secretaria_dependency])
@@ -85,7 +85,7 @@ def buscar_votante(ci: str, db: Session = Depends(get_db)):
     return {"ci": votante.ci, "nombre": votante.nombre, "correo": votante.correo}
 
 @router.post("/inscribir-texto-lote", dependencies=[secretaria_dependency])
-def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, db: Session = Depends(get_db)):
+def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
     registrados = 0
     errores = 0
     for v in datos.votantes:
@@ -115,13 +115,12 @@ def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, db: Session = Depend
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
         
-        registrados += 1
-        
     db.commit()
+    log_audit(db, user.id, "INSCRIBIR_LOTE_TEXTO", f"Registró {registrados} votantes (omitió {errores} duplicados).", request)
     return {"registrados": registrados, "omitidos": errores}
 
 @router.post("/inscribir-lote", dependencies=[secretaria_dependency])
-async def inscribir_lote(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
     if not file.filename.endswith(('.xlsx')):
         raise HTTPException(status_code=400, detail="El archivo debe ser un Excel .xlsx")
     
@@ -183,7 +182,6 @@ async def inscribir_lote(file: UploadFile = File(...), db: Session = Depends(get
         pwd_hash = get_password_hash(ci)
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
-        registrados += 1
-        
     db.commit()
+    log_audit(db, user.id, "INSCRIBIR_LOTE_EXCEL", f"Archivo: {file.filename}. Registró {registrados} votantes (omitió {errores}).", request)
     return {"msg": f"Procesamiento listo", "registrados": registrados, "omitidos": errores}

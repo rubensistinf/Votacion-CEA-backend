@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from auth import require_role, get_current_user
 import random
+from utils import log_audit
 
 router = APIRouter(prefix="/votante", tags=["Votante"])
 votante_dependency = Depends(require_role(["votante", "jefe"]))
@@ -43,7 +44,7 @@ def listar_candidatos(current_user: models.Usuario = Depends(get_current_user), 
     return db.query(models.Candidato).all()
 
 @router.post("/votar")
-def emitir_voto(voto: schemas.VotoCreate, current_user: models.Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+def emitir_voto(voto: schemas.VotoCreate, request: Request, current_user: models.Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.rol not in ["votante", "jefe"]:
         raise HTTPException(status_code=403, detail="Acceso denegado")
 
@@ -66,6 +67,7 @@ def emitir_voto(voto: schemas.VotoCreate, current_user: models.Usuario = Depends
     db.add(db_voto)
     votante.ha_votado = True
     db.commit()
+    log_audit(db, current_user.id, "VOTO_EMITIDO", f"Elección ID: {voto.eleccion_id}", request)
     return {"msg": "Voto registrado exitosamente.", "eleccion": eleccion.nombre}
 
 @router.get("/estado-eleccion")

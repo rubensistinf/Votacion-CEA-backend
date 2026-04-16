@@ -71,3 +71,15 @@ class Voto(Base):
     candidato_id = Column(Integer, ForeignKey("candidatos.id"))
     eleccion_id = Column(Integer, ForeignKey("elecciones.id"))
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+class AuditLog(Base):
+    """Registro de auditoría para acciones críticas administrativos."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    accion = Column(String)  # ej: "CREAR_ELECCION", "HABILITAR_VOTANTE", "BORRAR_MESAS"
+    detalle = Column(String) # Información adicional
+    ip_address = Column(String, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
