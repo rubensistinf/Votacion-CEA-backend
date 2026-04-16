@@ -51,6 +51,11 @@ def registrar_candidato(candidato: schemas.CandidatoCreate, db: Session = Depend
     db.add(db_candidato)
     db.flush()  # Para obtener el id del candidato
     
+    # Asignar imagen_base64 por defecto (1.png, 2.png, etc) según el orden de inscripción si no se subió una
+    if not db_candidato.imagen_base64:
+        orden = db.query(models.Candidato).filter(models.Candidato.eleccion_id == candidato.eleccion_id, models.Candidato.id <= db_candidato.id).count()
+        db_candidato.imagen_base64 = f"../candidatos/{orden}.png"
+    
     # Si el candidato tiene CI, also inscribirlo como votante
     if candidato.ci_representante:
         ci = candidato.ci_representante.strip()
