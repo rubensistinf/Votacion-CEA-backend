@@ -4,6 +4,7 @@ import models, schemas
 from database import get_db
 from auth import require_role
 from sqlalchemy import func
+import random
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 admin_dependency = Depends(require_role(["admin"]))
@@ -97,7 +98,7 @@ def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, db: Session = Depends(get_
 
 @router.post("/distribuir-mesas/{eleccion_id}", dependencies=[admin_dependency])
 def distribuir_mesas(eleccion_id: int, db: Session = Depends(get_db)):
-    """Distribuye todos los votantes sin mesa asignada entre las mesas disponibles (round-robin)."""
+    """Distribuye por sorteo aleatorio todos los votantes sin mesa entre las mesas disponibles."""
     mesas = db.query(models.Mesa).filter(models.Mesa.eleccion_id == eleccion_id).all()
     if not mesas:
         raise HTTPException(status_code=400, detail="No hay mesas creadas para esta elección.")
@@ -109,22 +110,29 @@ def distribuir_mesas(eleccion_id: int, db: Session = Depends(get_db)):
     if not pendientes:
         return {"msg": "Todos los votantes ya tienen mesa asignada.", "distribuidos": 0}
 
+    # ¡SORTEO ALEATORIO! Mezclar antes de asignar
+    random.shuffle(pendientes)
+
     asignados = 0
+    resumen = {m.numero: 0 for m in mesas}
     for i, votante in enumerate(pendientes):
-        mesa = mesas[i % len(mesas)]  # Round-robin
+        mesa = mesas[i % len(mesas)]
         asig = models.AsignacionMesa(
             votante_ci=votante.ci,
             mesa_id=mesa.id,
             mesa_numero=mesa.numero
         )
         db.add(asig)
+        resumen[mesa.numero] += 1
         asignados += 1
 
     db.commit()
+    resumen_str = " | ".join([f"Mesa {k}: {v} votantes" for k, v in sorted(resumen.items())])
     return {
-        "msg": f"✅ {asignados} votantes distribuidos en {len(mesas)} mesa(s).",
+        "msg": f"✅ Sorteo completado. {asignados} votantes distribuidos aleatoriamente en {len(mesas)} mesa(s).",
         "distribuidos": asignados,
-        "mesas": len(mesas)
+        "mesas": len(mesas),
+        "resumen": resumen_str
     }
 
 # ─── RESULTADOS ───
