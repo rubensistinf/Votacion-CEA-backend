@@ -335,4 +335,14 @@ def reset_sistema(request: Request, db: Session = Depends(get_db), admin: models
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error durante el reinicio: {str(e)}")
 
+@router.get("/forzar-migracion", dependencies=[admin_dependency])
+def forzar_migracion(db: Session = Depends(get_db)):
+    """Ruta de emergencia para forzar la creación de columnas faltantes en Render."""
+    from migrate_db import migrate
+    try:
+        migrate()
+        return {"msg": "Esquema sincronizado. Las columnas faltantes deberían estar activas."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en migración forzada: {str(e)}")
+
 
