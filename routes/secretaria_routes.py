@@ -10,8 +10,8 @@ from io import BytesIO
 router = APIRouter(prefix="/secretaria", tags=["Secretaria"])
 secretaria_dependency = Depends(require_role(["admin", "secretaria"]))
 
-@router.post("/usuarios", response_model=schemas.VotanteResponse, dependencies=[secretaria_dependency])
-def inscribir_votante(votante: schemas.VotanteCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
+@router.post("/usuarios", response_model=schemas.VotanteResponse)
+def inscribir_votante(votante: schemas.VotanteCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
     # Validar si ya existe
     existe = db.query(models.Votante).filter(models.Votante.ci == votante.ci).first()
     if existe:
@@ -45,8 +45,8 @@ def listar_votantes(db: Session = Depends(get_db)):
     votantes = db.query(models.Votante).all()
     return [{"ci": v.ci, "nombre": v.nombre, "correo": v.correo, "habilitado": v.habilitado, "ha_votado": v.ha_votado} for v in votantes]
 
-@router.post("/candidatos", response_model=schemas.CandidatoResponse, dependencies=[secretaria_dependency])
-def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
+@router.post("/candidatos", response_model=schemas.CandidatoResponse)
+def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
     db_candidato = models.Candidato(**candidato.model_dump(exclude={'ci_representante'}))
     db.add(db_candidato)
     db.flush()  # Para obtener el id del candidato
@@ -84,8 +84,8 @@ def buscar_votante(ci: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No registrado")
     return {"ci": votante.ci, "nombre": votante.nombre, "correo": votante.correo}
 
-@router.post("/inscribir-texto-lote", dependencies=[secretaria_dependency])
-def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
+@router.post("/inscribir-texto-lote")
+def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
     registrados = 0
     errores = 0
     for v in datos.votantes:
@@ -119,8 +119,8 @@ def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db
     log_audit(db, user.id, "INSCRIBIR_LOTE_TEXTO", f"Registró {registrados} votantes (omitió {errores} duplicados).", request)
     return {"registrados": registrados, "omitidos": errores}
 
-@router.post("/inscribir-lote", dependencies=[secretaria_dependency])
-async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), user: models.Usuario = secretaria_dependency):
+@router.post("/inscribir-lote")
+async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
     if not file.filename.endswith(('.xlsx')):
         raise HTTPException(status_code=400, detail="El archivo debe ser un Excel .xlsx")
     

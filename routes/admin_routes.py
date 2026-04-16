@@ -11,8 +11,8 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 admin_dependency = Depends(require_role(["admin"]))
 
 # ─── ELECCIONES ───
-@router.post("/elecciones", response_model=schemas.EleccionResponse, dependencies=[admin_dependency])
-def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
+@router.post("/elecciones", response_model=schemas.EleccionResponse)
+def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     db_eleccion = models.Eleccion(nombre=eleccion.nombre, activa=True)
     db.add(db_eleccion)
     db.commit()
@@ -34,7 +34,7 @@ def toggle_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
     return {"msg": f"Elección {'abierta' if eleccion.activa else 'cerrada'}.", "activa": eleccion.activa}
 
 @router.delete("/elecciones/{eleccion_id}")
-def eliminar_eleccion(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
+def eliminar_eleccion(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == eleccion_id).first()
     if not eleccion:
         raise HTTPException(status_code=404, detail="Elección no encontrada")
@@ -126,8 +126,8 @@ def listar_mesas(eleccion_id: int, db: Session = Depends(get_db)):
         })
     return resultado
 
-@router.post("/asignar-jefe-ci", dependencies=[admin_dependency])
-def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, db: Session = Depends(get_db)):
+@router.post("/asignar-jefe-ci")
+def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     """Busca un votante y lo asigna automáticamente a la siguiente mesa libre de la elección."""
     votante = db.query(models.Votante).filter(models.Votante.ci == datos.ci).first()
     if not votante:
@@ -169,14 +169,16 @@ def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, db: Session = Depends(get_
         db.add(db_asignacion)
 
     db.commit()
+    log_audit(db, admin.id, "ASIGNAR_JEFE", f"Asignó a {votante.nombre} (CI: {votante.ci}) a Mesa {mesa_asignar.numero}", request)
+
     return {
         "msg": f"✅ {votante.nombre} asignado automáticamente como Jefe de la Mesa Nº {mesa_asignar.numero}.",
         "jefe": votante.nombre,
         "mesa": mesa_asignar.numero
     }
 
-@router.delete("/mesas/{mesa_id}", dependencies=[admin_dependency])
-def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
+@router.delete("/mesas/{mesa_id}")
+def eliminar_mesa(mesa_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     mesa = db.query(models.Mesa).filter(models.Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -190,11 +192,11 @@ def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
     # Eliminar la Mesa
     db.delete(mesa)
     db.commit()
-    
+    log_audit(db, admin.id, "ELIMINAR_MESA", f"Eliminó Mesa {mesa.numero} (ID: {mesa_id})", request)
     return {"msg": f"Mesa {mesa.numero} eliminada exitosamente. Los votantes asignados a ella deberán ser redistribuidos."}
 
 @router.post("/distribuir-mesas/{eleccion_id}")
-def distribuir_mesas(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = admin_dependency):
+def distribuir_mesas(eleccion_id: int, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     """Distribuye por sorteo aleatorio todos los votantes sin mesa entre las mesas disponibles."""
     mesas = db.query(models.Mesa).filter(models.Mesa.eleccion_id == eleccion_id).all()
     if not mesas:
