@@ -88,6 +88,15 @@ def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, db: Session = Depends(get_
     else:
         db_jefe = models.JefeMesa(mesa_id=datos.mesa_id, usuario_id=usuario.id, nombre_jefe=votante.nombre)
         db.add(db_jefe)
+        
+    # Asignarlo a esa misma mesa para que pueda votar y no entre al sorteo
+    asignacion = db.query(models.AsignacionMesa).filter(models.AsignacionMesa.votante_ci == votante.ci).first()
+    if asignacion:
+        asignacion.mesa_id = mesa.id
+        asignacion.mesa_numero = mesa.numero
+    else:
+        db_asignacion = models.AsignacionMesa(votante_ci=votante.ci, mesa_id=mesa.id, mesa_numero=mesa.numero)
+        db.add(db_asignacion)
 
     db.commit()
     return {
