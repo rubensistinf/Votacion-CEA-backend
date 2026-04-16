@@ -96,39 +96,49 @@ def buscar_votante(ci: str, db: Session = Depends(get_db)):
 @router.post("/inscribir-texto-lote")
 def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
     registrados = 0
-    errores = 0
+    omitidos = 0
+    
+    # Obtener CIs existentes de una sola vez para búsqueda rápida en memoria
+    cis_existentes = {v.ci for v in db.query(models.Votante.ci).all()}
+    correos_existentes = {u.correo for u in db.query(models.Usuario.correo).all()}
+
     for v in datos.votantes:
         ci = str(v.ci).strip()
+        if not ci or ci in cis_existentes:
+            omitidos += 1
+            continue
+            
         nombres = str(v.nombres).strip()
         apellidos = str(v.apellidos).strip()
         nombre_completo = f"{nombres} {apellidos}".strip()
         
-        # Validar si existe
-        if db.query(models.Votante).filter(models.Votante.ci == ci).first():
-            errores += 1
-            continue
-            
-        partes = nombres.lower().split()
-        ape_partes = apellidos.lower().split()
-        p1 = partes[0] if partes else "estudiante"
-        p2 = ape_partes[0] if ape_partes else ci
-        
+        # Generar correo único
+        p1 = nombres.lower().split()[0] if nombres else "estudiante"
+        p2 = apellidos.lower().split()[0] if apellidos else ci
         correo = f"{p1}.{p2}@cea.com"
-        if db.query(models.Votante).filter(models.Votante.correo == correo).first():
+        
+        if correo in correos_existentes:
             correo = f"{p1}.{p2}{ci}@cea.com"
             
+        # Añadir a la base de datos (sin commit aún)
         db_votante = models.Votante(ci=ci, nombre=nombre_completo, correo=correo)
         db.add(db_votante)
         
         pwd_hash = get_password_hash(ci)
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
+        
+        # Actualizar sets locales para evitar duplicados dentro del mismo lote
+        cis_existentes.add(ci)
+        correos_existentes.add(correo)
         registrados += 1
         
-    db.commit()
-    log_audit(db, user.id, "INSCRIBIR_LOTE_TEXTO", f"Registró {registrados} votantes (omitió {errores} duplicados).", request)
-    db.commit()
-    return {"registrados": registrados, "omitidos": errores}
+    if registrados > 0:
+        db.commit()
+        log_audit(db, user.id, "INSCRIBIR_LOTE_TEXTO", f"Registró masivamente {registrados} votantes.", request)
+        db.commit()
+        
+    return {"registrados": registrados, "omitidos": omitidos}
 
 @router.post("/inscribir-lote")
 async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
@@ -158,34 +168,33 @@ async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Ses
     if ci_idx == -1 or (nom_idx == -1 and ape_idx == -1):
         raise HTTPException(status_code=400, detail="Formato inválido. Debe tener columnas: CI, Nombres, Apellidos")
         
+    # Obtener CIs y correos existentes para búsqueda rápida
+    cis_existentes = {v.ci for v in db.query(models.Votante.ci).all()}
+    correos_existentes = {u.correo for u in db.query(models.Usuario.correo).all()}
+
     for row in sheet.iter_rows(min_row=2, values_only=True):
         if not row[ci_idx]:
             continue
             
         ci = str(row[ci_idx]).strip()
+        if ci in cis_existentes:
+            errores += 1
+            continue
+
         nombres = str(row[nom_idx] or "").strip()
         apellidos = str(row[ape_idx] or "") if ape_idx != -1 else ""
         nombre_completo = f"{nombres} {apellidos}".strip()
         
-        # Validar si existe
-        if db.query(models.Votante).filter(models.Votante.ci == ci).first():
-            errores += 1
-            continue
-            
         partes = nombres.lower().split()
         ape_partes = apellidos.lower().split()
         
-        p1 = partes[0] if partes else ""
-        p2 = ape_partes[0] if ape_partes else ""
-        
-        if p1 and p2:
-            correo = f"{p1}.{p2}@cea.com"
-        else:
-            correo = f"{p1 or p2}@cea.com"
+        p1 = partes[0] if partes else "estudiante"
+        p2 = ape_partes[0] if ape_partes else ci
+        correo = f"{p1}.{p2}@cea.com"
             
         # Manejar correos duplicados
-        if db.query(models.Votante).filter(models.Votante.correo == correo).first():
-            correo = f"{correo.split('@')[0]}{ci}@cea.com"
+        if correo in correos_existentes:
+            correo = f"{p1}.{p2}{ci}@cea.com"
             
         db_votante = models.Votante(ci=ci, nombre=nombre_completo, correo=correo)
         db.add(db_votante)
@@ -193,7 +202,15 @@ async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Ses
         pwd_hash = get_password_hash(ci)
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
+        
+        # Actualizar sets locales
+        cis_existentes.add(ci)
+        correos_existentes.add(correo)
         registrados += 1
-    db.commit()
-    log_audit(db, user.id, "INSCRIBIR_LOTE_EXCEL", f"Archivo: {file.filename}. Registró {registrados} votantes (omitió {errores}).", request)
+
+    if registrados > 0:
+        db.commit()
+        log_audit(db, user.id, "INSCRIBIR_LOTE_EXCEL", f"Archivo: {file.filename}. Registró {registrados} votantes.", request)
+        db.commit()
+
     return {"msg": f"Procesamiento listo", "registrados": registrados, "omitidos": errores}
