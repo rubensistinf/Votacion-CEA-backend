@@ -34,19 +34,40 @@ def toggle_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
 # ─── MESAS ───
 @router.post("/mesas", dependencies=[admin_dependency])
 def crear_mesa(mesa_req: schemas.MesaCreate, db: Session = Depends(get_db)):
-    """Genera N mesas automáticamente empezando por el número siguiente disponible."""
-    # Obtener el número máximo actual
-    max_mesa = db.query(func.max(models.Mesa.numero)).filter(models.Mesa.eleccion_id == mesa_req.eleccion_id).scalar()
-    start_num = (max_mesa or 0) + 1
-
-    nuevas_mesas = []
-    for i in range(mesa_req.cantidad):
-        db_mesa = models.Mesa(eleccion_id=mesa_req.eleccion_id, numero=start_num + i)
-        db.add(db_mesa)
-        nuevas_mesas.append(db_mesa)
+    """Genera mesas automáticamente para que el total coincida exactamente con la cantidad solicitada."""
+    mesas_actuales = db.query(models.Mesa).filter(models.Mesa.eleccion_id == mesa_req.eleccion_id).order_by(models.Mesa.numero).all()
+    total_actual = len(mesas_actuales)
+    
+    if mesa_req.cantidad == total_actual:
+        return {"msg": f"Ya existen exactamente {mesa_req.cantidad} mesas.", "desde": None, "hasta": None}
         
-    db.commit()
-    return {"msg": f"Se generaron {mesa_req.cantidad} mesas con éxito.", "desde": start_num, "hasta": start_num + mesa_req.cantidad - 1}
+    elif mesa_req.cantidad > total_actual:
+        # Faltan mesas, creamos las necesarias
+        start_num = total_actual + 1
+        diferencia = mesa_req.cantidad - total_actual
+        for i in range(diferencia):
+            db_mesa = models.Mesa(eleccion_id=mesa_req.eleccion_id, numero=start_num + i)
+            db.add(db_mesa)
+        db.commit()
+        return {"msg": f"Se añadieron {diferencia} nuevas mesas (Total: {mesa_req.cantidad}).", "desde": start_num, "hasta": mesa_req.cantidad}
+        
+    else:
+        # Hay más mesas de las requeridas, eliminamos las sobrantes (desde el final)
+        mesas_sobrantes = db.query(models.Mesa).filter(
+            models.Mesa.eleccion_id == mesa_req.eleccion_id, 
+            models.Mesa.numero > mesa_req.cantidad
+        ).all()
+        
+        cant_eliminadas = 0
+        for mesa in mesas_sobrantes:
+            # Eliminar dependencias
+            db.query(models.JefeMesa).filter(models.JefeMesa.mesa_id == mesa.id).delete()
+            db.query(models.AsignacionMesa).filter(models.AsignacionMesa.mesa_id == mesa.id).delete()
+            db.delete(mesa)
+            cant_eliminadas += 1
+            
+        db.commit()
+        return {"msg": f"Se ajustó la capacidad. Se eliminaron {cant_eliminadas} mesas sobrantes (Total exacto: {mesa_req.cantidad}).", "desde": None, "hasta": None}
 
 @router.get("/mesas/{eleccion_id}", dependencies=[admin_dependency])
 def listar_mesas(eleccion_id: int, db: Session = Depends(get_db)):
