@@ -36,16 +36,14 @@ def validar_votante(ci: str, db: Session = Depends(get_db), current_user: models
         jefe_record = db.query(models.JefeMesa).filter(models.JefeMesa.usuario_id == current_user.id).first()
         if not jefe_record:
             raise HTTPException(status_code=400, detail="Tú (Jefe) no tienes mesa asignada.")
-        
         asignacion = db.query(models.AsignacionMesa).filter(models.AsignacionMesa.votante_ci == ci).first()
         if not asignacion:
-            raise HTTPException(status_code=400, detail="Este estudiante no tiene mesa asignada (falta realizar sorteo).")
+            raise HTTPException(status_code=400, detail="⚠️ Este estudiante no tiene mesa asignada. Asegúrate de que el Administrador haya realizado el SORTEO DE MESAS (Paso 3).")
             
         if asignacion.mesa_id != jefe_record.mesa_id:
-            # Encontrar número de mesa del jefe
             mesa_jefe = db.query(models.Mesa).filter(models.Mesa.id == jefe_record.mesa_id).first()
             num_jefe = mesa_jefe.numero if mesa_jefe else '?'
-            raise HTTPException(status_code=403, detail=f"No puedes habilitar. Tú controlas la Mesa {num_jefe}, pero el estudiante pertenece a la Mesa {asignacion.mesa_numero}.")
+            raise HTTPException(status_code=403, detail=f"❌ No puedes habilitar a este votante. Tú controlas la Mesa {num_jefe}, pero el estudiante pertenece a la Mesa {asignacion.mesa_numero}.")
 
     if votante.habilitado:
         raise HTTPException(status_code=400, detail="Votante ya habilitado")
