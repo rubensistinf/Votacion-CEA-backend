@@ -1,5 +1,4 @@
 import logging
-from lib2to3.pytree import Base
 from sqlalchemy import text
 from database import engine
 
