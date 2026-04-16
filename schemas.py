@@ -22,6 +22,14 @@ class UsuarioResponse(UsuarioBase):
     class Config:
         from_attributes = True
 
+class VotanteLoteItem(BaseModel):
+    ci: str
+    nombres: str
+    apellidos: str = ""
+
+class VotanteLoteRequest(BaseModel):
+    votantes: list[VotanteLoteItem]
+
 class EleccionCreate(BaseModel):
     nombre: str
 

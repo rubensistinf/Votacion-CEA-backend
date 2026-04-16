@@ -84,6 +84,42 @@ def buscar_votante(ci: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No registrado")
     return {"ci": votante.ci, "nombre": votante.nombre, "correo": votante.correo}
 
+@router.post("/inscribir-texto-lote", dependencies=[secretaria_dependency])
+def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, db: Session = Depends(get_db)):
+    registrados = 0
+    errores = 0
+    for v in datos.votantes:
+        ci = str(v.ci).strip()
+        nombres = str(v.nombres).strip()
+        apellidos = str(v.apellidos).strip()
+        nombre_completo = f"{nombres} {apellidos}".strip()
+        
+        # Validar si existe
+        if db.query(models.Votante).filter(models.Votante.ci == ci).first():
+            errores += 1
+            continue
+            
+        partes = nombres.lower().split()
+        ape_partes = apellidos.lower().split()
+        p1 = partes[0] if partes else "estudiante"
+        p2 = ape_partes[0] if ape_partes else ci
+        
+        correo = f"{p1}.{p2}@cea.com"
+        if db.query(models.Votante).filter(models.Votante.correo == correo).first():
+            correo = f"{p1}.{p2}{ci}@cea.com"
+            
+        db_votante = models.Votante(ci=ci, nombre=nombre_completo, correo=correo)
+        db.add(db_votante)
+        
+        pwd_hash = get_password_hash(ci)
+        db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
+        db.add(db_usuario)
+        
+        registrados += 1
+        
+    db.commit()
+    return {"registrados": registrados, "omitidos": errores}
+
 @router.post("/inscribir-lote", dependencies=[secretaria_dependency])
 async def inscribir_lote(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith(('.xlsx')):
