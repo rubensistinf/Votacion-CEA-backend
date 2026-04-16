@@ -300,8 +300,39 @@ def obtener_estadisticas(eleccion_id: int = None, db: Session = Depends(get_db))
         "participacion": round((total_votos / total_habilitados * 100), 1) if total_habilitados else 0
     }
 
-@router.get("/auditoria", response_model=list[schemas.AuditLogResponse], dependencies=[admin_dependency])
-def obtener_auditoria(db: Session = Depends(get_db)):
-    """Retorna los últimos 200 logs de auditoria para revisión administrativa."""
-    return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).limit(200).all()
+@router.post("/reset-sistema", dependencies=[admin_dependency])
+def reset_sistema(request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
+    """Limpia todo el sistema dejando solo los 4 usuarios base (Cero Datos Nivel Pro)."""
+    try:
+        # 1. Borrar datos transaccionales
+        db.query(models.Voto).delete()
+        db.query(models.Candidato).delete()
+        db.query(models.AuditLog).delete()
+        db.query(models.AsignacionMesa).delete()
+        db.query(models.JefeMesa).delete()
+        db.query(models.Mesa).delete()
+        db.query(models.Votante).delete()
+        db.query(models.Eleccion).delete()
+        
+        # 2. Borrar usuarios adicionales que no sean los 4 base
+        base_emails = ["admin@cea.com", "secretaria@cea.com", "jefe@cea.com", "votante@cea.com"]
+        db.query(models.Usuario).filter(~models.Usuario.correo.in_(base_emails)).delete(synchronize_session=False)
+        
+        db.commit()
+        
+        # Registrar esta acción de reset como primer log post-limpieza
+        nuevo_log = models.AuditLog(
+            usuario_id=admin.id,
+            accion="REINICIO_TOTAL",
+            detalle="El administrador ejecutó un reinicio total del sistema (Cero Datos).",
+            ip_address=request.client.host
+        )
+        db.add(nuevo_log)
+        db.commit()
+        
+        return {"msg": "Sistema reiniciado exitosamente. Todos los datos electorales han sido borrados."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error durante el reinicio: {str(e)}")
+
 

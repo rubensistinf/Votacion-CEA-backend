@@ -38,6 +38,11 @@ def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup actions
+    from migrate_db import migrate
+    try:
+        migrate()
+    except Exception as e:
+        print(f"⚠️ Error en la migración inicial: {e}")
     init_db()
     yield
     # Shutdown actions
