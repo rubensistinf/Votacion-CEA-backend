@@ -63,6 +63,20 @@ app.include_router(secretaria_routes.router)
 app.include_router(jefe_routes.router)
 app.include_router(votante_routes.router)
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log the full error to the console for tracking in Render logs
+    import traceback
+    print(f"🚨 ERROR GLOBAL DETECTADO: {exc}")
+    traceback.print_exc()
+    
+    # Return a clean error instead of a 500 crash
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno del sistema: {str(exc)}. Por favor reporta esto al administrador."}
+    )
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
