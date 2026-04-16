@@ -7,7 +7,7 @@ logger = logging.getLogger("migration")
 
 def migrate():
     """Ejecuta migraciones manuales para añadir columnas faltantes en Render."""
-    logger.info("Iniciando migración manual de base de datos...")
+    logger.info("🚀 Iniciando migración de base de datos...")
     
     with engine.begin() as conn:
         # 1. Verificar y añadir 'resultados_publicados' en 'elecciones'
@@ -18,7 +18,7 @@ def migrate():
             if "already exists" in str(e).lower():
                 logger.info("ℹ️ La columna 'resultados_publicados' ya existía.")
             else:
-                logger.error(f"❌ Error al añadir 'resultados_publicados': {e}")
+                logger.warning(f"⚠️ Nota sobre 'resultados_publicados': {e}")
 
         # 2. Verificar y añadir 'nombre_jefe' en 'jefes_mesa'
         try:
@@ -28,9 +28,9 @@ def migrate():
             if "already exists" in str(e).lower():
                 logger.info("ℹ️ La columna 'nombre_jefe' ya existía.")
             else:
-                logger.error(f"❌ Error al añadir 'nombre_jefe': {e}")
+                logger.warning(f"⚠️ Nota sobre 'nombre_jefe': {e}")
 
-    logger.info("Migración completada.")
+    logger.info("🏁 Migración completada.")
 
 if __name__ == "__main__":
     migrate()
