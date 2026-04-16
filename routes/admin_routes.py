@@ -12,7 +12,7 @@ admin_dependency = Depends(require_role(["admin"]))
 
 # ─── ELECCIONES ───
 @router.post("/elecciones", response_model=schemas.EleccionResponse)
-    db_eleccion = models.Eleccion(nombre=eleccion.nombre, activa=True)
+def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     db.add(db_eleccion)
     db.commit()
     db.refresh(db_eleccion)
