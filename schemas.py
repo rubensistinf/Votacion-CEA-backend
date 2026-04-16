@@ -83,7 +83,7 @@ class LoginCI(BaseModel):
 
 class MesaCreate(BaseModel):
     eleccion_id: int
-    numero: int
+    cantidad: int
 
 class AsignarJefe(BaseModel):
     mesa_id: int
@@ -91,7 +91,7 @@ class AsignarJefe(BaseModel):
 
 class AsignarJefeCI(BaseModel):
     ci: str
-    mesa_id: int
+    eleccion_id: int
 
 class VotoCreate(BaseModel):
     candidato_id: int
