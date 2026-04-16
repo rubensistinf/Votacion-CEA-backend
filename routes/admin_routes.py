@@ -20,7 +20,7 @@ def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Sessi
     db.commit() # Asegurar que el log se guarde
     return db_eleccion
 
-@router.get("/elecciones", response_model=list[schemas.EleccionResponse], dependencies=[admin_dependency])
+@router.get("/elecciones", response_model=list[schemas.EleccionResponse], dependencies=[Depends(require_role(["admin", "secretaria"]))])
 def listar_elecciones(db: Session = Depends(get_db)):
     return db.query(models.Eleccion).all()
 
@@ -134,9 +134,16 @@ def asignar_jefe_por_ci(datos: schemas.AsignarJefeCI, request: Request, db: Sess
         raise HTTPException(status_code=404, detail=f"Votante con CI {datos.ci} no encontrado en el padrón.")
 
     # Buscar todas las mesas de la elección
+    eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == datos.eleccion_id).first()
+    if not eleccion:
+        raise HTTPException(status_code=404, detail="La elección especificada no existe.")
+    
+    if not eleccion.activa and not eleccion.resultados_publicados:
+         raise HTTPException(status_code=400, detail="La elección debe estar abierta para asignar Jefes.")
+
     mesas_eleccion = db.query(models.Mesa).filter(models.Mesa.eleccion_id == datos.eleccion_id).order_by(models.Mesa.numero).all()
     if not mesas_eleccion:
-        raise HTTPException(status_code=400, detail="No se han creado mesas para esta elección.")
+        raise HTTPException(status_code=400, detail="No hay mesas creadas en esta elección. Primero crea mesas en el Paso 2.")
 
     # Buscar la primera mesa que no tenga jefe
     mesa_asignar = None

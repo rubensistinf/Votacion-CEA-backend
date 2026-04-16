@@ -49,6 +49,11 @@ def listar_votantes(db: Session = Depends(get_db)):
 
 @router.post("/candidatos", response_model=schemas.CandidatoResponse)
 def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    # Verificación Nivel Pro: ¿Existe la elección?
+    eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == candidato.eleccion_id).first()
+    if not eleccion:
+        raise HTTPException(status_code=404, detail=f"No se puede registrar candidato: La elección con ID {candidato.eleccion_id} no existe.")
+
     db_candidato = models.Candidato(**candidato.model_dump(exclude={'ci_representante'}))
     db.add(db_candidato)
     db.flush()  # Para obtener el id del candidato
