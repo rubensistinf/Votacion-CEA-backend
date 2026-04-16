@@ -89,6 +89,10 @@ class AsignarJefe(BaseModel):
     mesa_id: int
     usuario_id: int
 
+class AsignarJefeCI(BaseModel):
+    ci: str
+    mesa_id: int
+
 class VotoCreate(BaseModel):
     candidato_id: int
     eleccion_id: int

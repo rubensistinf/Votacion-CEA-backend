@@ -7,9 +7,9 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
-    correo = Column(String, unique=True, index=True) # sirvi para login
+    correo = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    rol = Column(String) # admin, secretaria, jefe, votante
+    rol = Column(String)  # admin, secretaria, jefe, votante
 
 class Eleccion(Base):
     __tablename__ = "elecciones"
@@ -31,6 +31,7 @@ class JefeMesa(Base):
     id = Column(Integer, primary_key=True, index=True)
     mesa_id = Column(Integer, ForeignKey("mesas.id"))
     usuario_id = Column(Integer, ForeignKey("usuarios.id"))
+    nombre_jefe = Column(String, nullable=True)  # Nombre del jefe para carnet
 
 class Candidato(Base):
     __tablename__ = "candidatos"
@@ -38,9 +39,9 @@ class Candidato(Base):
     id = Column(Integer, primary_key=True, index=True)
     eleccion_id = Column(Integer, ForeignKey("elecciones.id"))
     nombre = Column(String)
-    sigla = Column(String, nullable=True)  # ej: "MAS", "FRENTE UNIDO"
+    sigla = Column(String, nullable=True)
     cargo = Column(String)
-    frente = Column(String, nullable=True)  # Nombre del frente de campaña
+    frente = Column(String, nullable=True)
     descripcion = Column(String, nullable=True)
     imagen_base64 = Column(String, nullable=True)
 
@@ -50,9 +51,18 @@ class Votante(Base):
     id = Column(Integer, primary_key=True, index=True)
     ci = Column(String, unique=True, index=True)
     nombre = Column(String)
-    correo = Column(String, unique=True) # Para crear su usuario o login
+    correo = Column(String, unique=True)
     habilitado = Column(Boolean, default=False)
     ha_votado = Column(Boolean, default=False)
+
+class AsignacionMesa(Base):
+    """Relaciona cada votante con su mesa asignada."""
+    __tablename__ = "asignaciones_mesa"
+
+    id = Column(Integer, primary_key=True, index=True)
+    votante_ci = Column(String, ForeignKey("votantes.ci"), unique=True, index=True)
+    mesa_id = Column(Integer, ForeignKey("mesas.id"))
+    mesa_numero = Column(Integer)  # Desnormalizado para acceso rápido
 
 class Voto(Base):
     __tablename__ = "votos"
