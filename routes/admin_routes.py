@@ -31,6 +31,37 @@ def toggle_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"msg": f"Elección {'abierta' if eleccion.activa else 'cerrada'}.", "activa": eleccion.activa}
 
+@router.delete("/elecciones/{eleccion_id}", dependencies=[admin_dependency])
+def eliminar_eleccion(eleccion_id: int, db: Session = Depends(get_db)):
+    eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == eleccion_id).first()
+    if not eleccion:
+        raise HTTPException(status_code=404, detail="Elección no encontrada")
+
+    # 1. Eliminar votos y candidatos
+    db.query(models.Voto).filter(models.Voto.eleccion_id == eleccion_id).delete()
+    db.query(models.Candidato).filter(models.Candidato.eleccion_id == eleccion_id).delete()
+    
+    # 2. Buscar mesas de esta elección y eliminar Jefes y Asignaciones
+    mesas_ids = [m.id for m in db.query(models.Mesa).filter(models.Mesa.eleccion_id == eleccion_id).all()]
+    if mesas_ids:
+        db.query(models.AsignacionMesa).filter(models.AsignacionMesa.mesa_id.in_(mesas_ids)).delete(synchronize_session=False)
+        db.query(models.JefeMesa).filter(models.JefeMesa.mesa_id.in_(mesas_ids)).delete(synchronize_session=False)
+    
+    # 3. Eliminar Mesas
+    db.query(models.Mesa).filter(models.Mesa.eleccion_id == eleccion_id).delete()
+    
+    # 4. Restablecer el Padrón (Mantiene a la gente, pero borra su estado de "ha_votado" y "habilitado")
+    db.query(models.Votante).update({"ha_votado": False, "habilitado": False})
+    
+    # 5. Restituir cualquier usuario que era Jefe a Votante normal
+    db.query(models.Usuario).filter(models.Usuario.rol == "jefe").update({"rol": "votante"})
+    
+    # 6. Finalmente borrar la elección
+    db.delete(eleccion)
+    db.commit()
+    
+    return {"msg": "🗑️ Elección eliminada drásticamente. Todo reiniciado al estado inicial."}
+
 # ─── MESAS ───
 @router.post("/mesas", dependencies=[admin_dependency])
 def crear_mesa(mesa_req: schemas.MesaCreate, db: Session = Depends(get_db)):
