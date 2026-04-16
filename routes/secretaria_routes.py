@@ -46,10 +46,28 @@ def listar_votantes(db: Session = Depends(get_db)):
     return [{"ci": v.ci, "nombre": v.nombre, "correo": v.correo, "habilitado": v.habilitado, "ha_votado": v.ha_votado} for v in votantes]
 
 @router.post("/candidatos", response_model=schemas.CandidatoResponse, dependencies=[secretaria_dependency])
-
 def registrar_candidato(candidato: schemas.CandidatoCreate, db: Session = Depends(get_db)):
-    db_candidato = models.Candidato(**candidato.model_dump())
+    db_candidato = models.Candidato(**candidato.model_dump(exclude={'ci_representante'}))
     db.add(db_candidato)
+    db.flush()  # Para obtener el id del candidato
+    
+    # Si el candidato tiene CI, also inscribirlo como votante
+    if candidato.ci_representante:
+        ci = candidato.ci_representante.strip()
+        existe_votante = db.query(models.Votante).filter(models.Votante.ci == ci).first()
+        if not existe_votante:
+            partes = candidato.nombre.strip().lower().split()
+            p1 = partes[0] if len(partes) > 0 else 'candidato'
+            p2 = partes[1] if len(partes) > 1 else ci
+            correo = f"{p1}.{p2}@cea.com"
+            if db.query(models.Votante).filter(models.Votante.correo == correo).first():
+                correo = f"{p1}.{p2}{ci}@cea.com"
+            db_votante = models.Votante(ci=ci, nombre=candidato.nombre, correo=correo)
+            db.add(db_votante)
+            pwd_hash = get_password_hash(ci)
+            db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
+            db.add(db_usuario)
+    
     db.commit()
     db.refresh(db_candidato)
     return db_candidato

@@ -54,6 +54,7 @@ class CandidatoCreate(BaseModel):
     descripcion: Optional[str] = None
     eleccion_id: int
     imagen_base64: Optional[str] = None
+    ci_representante: Optional[str] = None  # CI del lider para auto-inscribirlo como votante
 
 class CandidatoResponse(BaseModel):
     id: int
