@@ -17,6 +17,7 @@ class Eleccion(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, index=True)
     activa = Column(Boolean, default=True)
+    resultados_publicados = Column(Boolean, default=False)
 
 class Mesa(Base):
     __tablename__ = "mesas"

@@ -37,6 +37,7 @@ class EleccionResponse(BaseModel):
     id: int
     nombre: str
     activa: bool
+    resultados_publicados: bool
     class Config:
         from_attributes = True
 

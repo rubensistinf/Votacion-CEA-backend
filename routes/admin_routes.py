@@ -250,14 +250,15 @@ def obtener_resultados(eleccion_id: int, db: Session = Depends(get_db)):
      .group_by(models.Candidato.id).order_by(func.count(models.Voto.id).desc()).all()
     return [{"candidato": v.nombre, "sigla": v.sigla, "cargo": v.cargo, "votos": v.total_votos} for v in votos_agrupados]
 
-@router.post("/publicar-resultados", dependencies=[admin_dependency])
+@router.get("/publicar-resultados", dependencies=[admin_dependency])
 def publicar_resultados(eleccion_id: int, db: Session = Depends(get_db)):
     eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == eleccion_id).first()
     if not eleccion:
         raise HTTPException(status_code=404, detail="Eleccion no encontrada")
     eleccion.activa = False
+    eleccion.resultados_publicados = True
     db.commit()
-    return {"msg": "Resultados publicados, elección cerrada."}
+    return {"msg": "Resultados publicados, elección cerrada definitivamente."}
 
 @router.get("/stats", dependencies=[admin_dependency])
 def obtener_estadisticas(eleccion_id: int = None, db: Session = Depends(get_db)):

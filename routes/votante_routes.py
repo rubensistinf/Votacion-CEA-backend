@@ -76,9 +76,9 @@ def estado_eleccion(db: Session = Depends(get_db)):
     """Endpoint público: devuelve si hay una elección activa y su info."""
     eleccion = db.query(models.Eleccion).filter(models.Eleccion.activa == True).first()
     if eleccion:
-        return {"activa": True, "id": eleccion.id, "nombre": eleccion.nombre}
+        return {"activa": True, "id": eleccion.id, "nombre": eleccion.nombre, "resultados_publicados": eleccion.resultados_publicados}
     # Si no hay activa, retornar la última
     ultima = db.query(models.Eleccion).order_by(models.Eleccion.id.desc()).first()
     if ultima:
-        return {"activa": False, "id": ultima.id, "nombre": ultima.nombre}
-    return {"activa": False, "id": None, "nombre": None}
+        return {"activa": False, "id": ultima.id, "nombre": ultima.nombre, "resultados_publicados": ultima.resultados_publicados}
+    return {"activa": False, "id": None, "nombre": None, "resultados_publicados": False}

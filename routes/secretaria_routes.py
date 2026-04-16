@@ -188,6 +188,7 @@ async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Ses
         pwd_hash = get_password_hash(ci)
         db_usuario = models.Usuario(correo=correo, password_hash=pwd_hash, rol="votante")
         db.add(db_usuario)
+        registrados += 1
     db.commit()
     log_audit(db, user.id, "INSCRIBIR_LOTE_EXCEL", f"Archivo: {file.filename}. Registró {registrados} votantes (omitió {errores}).", request)
     return {"msg": f"Procesamiento listo", "registrados": registrados, "omitidos": errores}
