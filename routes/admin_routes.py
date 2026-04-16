@@ -345,4 +345,7 @@ def forzar_migracion(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en migración forzada: {str(e)}")
 
-
+@router.get("/auditoria", response_model=list[schemas.AuditLogResponse])
+def listar_auditoria(db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
+    """Retorna los últimos 200 registros de auditoría."""
+    return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).limit(200).all()
