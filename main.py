@@ -9,10 +9,15 @@ from database import engine, SessionLocal
 from routes import auth_routes, admin_routes, secretaria_routes, jefe_routes, votante_routes
 from auth import get_password_hash
 
-# Crear tablas
-models.Base.metadata.create_all(bind=engine)
+# El motor de base de datos se encarga de las tablas
+# Quitamos create_all del flujo principal para evitar bloqueos en el arranque de Render
 
 def init_db():
+    try:
+        models.Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"⚠️ Error al crear tablas: {e}")
+        
     db = SessionLocal()
     # List of default users expected
     default_users = [
@@ -23,14 +28,17 @@ def init_db():
     ]
     
     for u in default_users:
-        user = db.query(models.Usuario).filter(models.Usuario.correo == u["correo"]).first()
-        if not user:
-            new_user = models.Usuario(
-                correo=u["correo"],
-                password_hash=get_password_hash("12345"), # Password by default as requested
-                rol=u["rol"]
-            )
-            db.add(new_user)
+        try:
+            user = db.query(models.Usuario).filter(models.Usuario.correo == u["correo"]).first()
+            if not user:
+                new_user = models.Usuario(
+                    correo=u["correo"],
+                    password_hash=get_password_hash("12345"),
+                    rol=u["rol"]
+                )
+                db.add(new_user)
+        except:
+            pass
     
     db.commit()
     db.close()
