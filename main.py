@@ -45,9 +45,31 @@ def init_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ya no ejecutamos migración aquí para que Render arranque al instante
-    # El admin puede ejecutarla manualmente con el botón "Reparar"
+    # Startup actions: Crear tablas si no existen
     init_db()
+    
+    # MIGRACIÓN AUTOMÁTICA DE EMERGENCIA (Añadir columnas faltantes)
+    from sqlalchemy import text
+    from database import engine
+    with engine.connect() as conn:
+        print("🔍 Verificando esquema de candidatos...")
+        columns_to_check = [
+            ("sigla", "VARCHAR(100)"),
+            ("frente", "VARCHAR(100)"),
+            ("imagen_base64", "TEXT")
+        ]
+        for col_name, col_type in columns_to_check:
+            try:
+                # Intentar añadir la columna (fallará si ya existe, lo cual es manejado)
+                conn.execute(text(f"ALTER TABLE candidatos ADD COLUMN {col_name} {col_type};"))
+                conn.commit()
+                print(f"✅ Columna añadida: {col_name}")
+            except Exception:
+                # Ignorar si la columna ya existe
+                conn.rollback()
+                pass
+        print("🚀 Base de datos sincronizada.")
+    
     yield
     # Shutdown actions
 
