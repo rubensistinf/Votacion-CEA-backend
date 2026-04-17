@@ -56,7 +56,7 @@ app = FastAPI(title="API Elecciones CEA", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Permitir todos temporalmente para asegurar conectividad total
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -80,6 +80,14 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": f"Error interno del sistema: {str(exc)}. Por favor reporta esto al administrador."}
     )
+
+@app.get("/ping")
+def ping():
+    return {"status": "ok", "version": "2.0.1"}
+
+@app.get("/")
+def home():
+    return {"msg": "CEA Votación Backend v2.0 Online"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
