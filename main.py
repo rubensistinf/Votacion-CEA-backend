@@ -53,18 +53,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="API Elecciones CEA", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://eleccione-cea.onrender.com",
-        "https://elecciones-cea.onrender.com",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.middleware("http")
+async def custom_cors_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response
+        response = Response()
+    else:
+        response = await call_next(request)
+    
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "false"
+    return response
+
 
 @app.get("/health")
 def health_check():
