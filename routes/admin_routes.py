@@ -378,6 +378,37 @@ def reporte_jurados(db: Session = Depends(get_db), admin: models.Usuario = Depen
         })
     return resultado
 
+@router.get("/reportes/resultados")
+def reporte_resultados(db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
+    # Retrieve the latest election to report on
+    eleccion = db.query(models.Eleccion).order_by(models.Eleccion.id.desc()).first()
+    if not eleccion:
+        return []
+    
+    candidatos = db.query(models.Candidato).filter(models.Candidato.eleccion_id == eleccion.id).all()
+    total_votos = db.query(models.Voto).filter(models.Voto.eleccion_id == eleccion.id).count()
+
+    resultados = []
+    for c in candidatos:
+        votos = db.query(models.Voto).filter(models.Voto.candidato_id == c.id).count()
+        porcentaje = (votos / total_votos * 100) if total_votos > 0 else 0
+        resultados.append({
+            "id": c.id,
+            "candidato": c.nombre,
+            "sigla": c.sigla or "—",
+            "votos": votos,
+            "porcentaje": round(porcentaje, 2)
+        })
+    
+    # Sort by descending votes
+    resultados.sort(key=lambda x: x["votos"], reverse=True)
+    
+    # Check if there is a winner
+    for i, r in enumerate(resultados):
+        r["estado"] = "🏆 Ganador" if i == 0 and r["votos"] > 0 else "—"
+        
+    return resultados
+
 @router.get("/export/{entity}")
 def exportar_csv(entity: str, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     import io, csv
@@ -403,6 +434,11 @@ def exportar_csv(entity: str, db: Session = Depends(get_db), admin: models.Usuar
         data = reporte_jurados(db, admin)
         for r in data:
             writer.writerow([r['nombre'], r['correo'], r['mesa']])
+    elif entity == "resultados":
+        writer.writerow(["Posición", "Candidato", "Sigla", "Votos Obtenidos", "Porcentaje", "Estado"])
+        data = reporte_resultados(db, admin)
+        for i, r in enumerate(data):
+            writer.writerow([i+1, r['candidato'], r['sigla'], r['votos'], f"{r['porcentaje']}%", r['estado']])
     else:
         raise HTTPException(status_code=400, detail="Entidad no válida para exportar")
 
