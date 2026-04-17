@@ -39,8 +39,7 @@ def mi_info(current_user: models.Usuario = Depends(get_current_user), db: Sessio
 
 @router.get("/candidatos")
 def listar_candidatos(current_user: models.Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.rol not in ["votante", "jefe", "secretaria", "admin"]:
-        raise HTTPException(status_code=403, detail="Acceso denegado")
+    # Simplemente requerimos que esté autenticado (cualquier rol sirve para ver la lista pública/interna)
     return db.query(models.Candidato).all()
 
 @router.post("/votar")

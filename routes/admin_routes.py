@@ -349,3 +349,66 @@ def forzar_migracion(db: Session = Depends(get_db)):
 def listar_auditoria(db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
     """Retorna los últimos 200 registros de auditoría."""
     return db.query(models.AuditLog).order_by(models.AuditLog.timestamp.desc()).limit(200).all()
+
+# ─── REPORTES Y EXPORTACIÓN ───
+@router.get("/reportes/votantes")
+def reporte_votantes(db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    votantes = db.query(models.Votante).all()
+    resultado = []
+    for v in votantes:
+        asig = db.query(models.AsignacionMesa).filter(models.AsignacionMesa.votante_ci == v.ci).first()
+        resultado.append({
+            "ci": v.ci, "nombre": v.nombre, "correo": v.correo,
+            "habilitado": v.habilitado, "ha_votado": v.ha_votado,
+            "mesa": asig.mesa_numero if asig else "S/M"
+        })
+    return resultado
+
+@router.get("/reportes/jurados")
+def reporte_jurados(db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
+    jefes = db.query(models.JefeMesa).all()
+    resultado = []
+    for j in jefes:
+        mesa = db.query(models.Mesa).filter(models.Mesa.id == j.mesa_id).first()
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == j.usuario_id).first()
+        resultado.append({
+            "nombre": j.nombre_jefe,
+            "correo": usuario.correo if usuario else "—",
+            "mesa": mesa.numero if mesa else "—"
+        })
+    return resultado
+
+@router.get("/export/{entity}")
+def exportar_csv(entity: str, db: Session = Depends(get_db), admin: models.Usuario = Depends(require_role(["admin"]))):
+    import io, csv
+    from fastapi.responses import StreamingResponse
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    filename = f"reporte_{entity}.csv"
+    
+    if entity == "votantes":
+        writer.writerow(["CI", "Nombre", "Correo", "Habilitado", "Voto Emitido", "Mesa"])
+        data = reporte_votantes(db, admin)
+        for r in data:
+            writer.writerow([r['ci'], r['nombre'], r['correo'], r['habilitado'], r['ha_votado'], r['mesa']])
+    elif entity == "candidatos":
+        writer.writerow(["ID", "Nombre", "Sigla", "Cargo", "Frente"])
+        cands = db.query(models.Candidato).all()
+        for c in cands:
+            writer.writerow([c.id, c.nombre, c.sigla, c.cargo, c.frente])
+    elif entity == "jurados":
+        writer.writerow(["Nombre", "Correo", "Mesa Asignada"])
+        data = reporte_jurados(db, admin)
+        for r in data:
+            writer.writerow([r['nombre'], r['correo'], r['mesa']])
+    else:
+        raise HTTPException(status_code=400, detail="Entidad no válida para exportar")
+
+    output.seek(0)
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
