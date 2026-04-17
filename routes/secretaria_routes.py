@@ -12,6 +12,9 @@ secretaria_dependency = Depends(require_role(["admin", "secretaria"]))
 
 @router.post("/usuarios", response_model=schemas.VotanteResponse)
 def inscribir_votante(votante: schemas.VotanteCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    if db.query(models.Eleccion).filter(models.Eleccion.activa == True).first():
+        raise HTTPException(status_code=400, detail="INSCRIPCIONES CERRADAS: Hay una elección en curso. No se pueden registrar más estudiantes.")
+        
     # Validar si ya existe
     existe = db.query(models.Votante).filter(models.Votante.ci == votante.ci).first()
     if existe:
@@ -49,6 +52,9 @@ def listar_votantes(db: Session = Depends(get_db)):
 
 @router.post("/candidatos", response_model=schemas.CandidatoResponse)
 def registrar_candidato(candidato: schemas.CandidatoCreate, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    if db.query(models.Eleccion).filter(models.Eleccion.activa == True).first():
+        raise HTTPException(status_code=400, detail="INSCRIPCIONES CERRADAS: Hay una elección en curso. No se pueden registrar más candidatos.")
+
     # Verificación Nivel Pro: ¿Existe la elección?
     eleccion = db.query(models.Eleccion).filter(models.Eleccion.id == candidato.eleccion_id).first()
     if not eleccion:
@@ -95,6 +101,9 @@ def buscar_votante(ci: str, db: Session = Depends(get_db)):
 
 @router.post("/inscribir-texto-lote")
 def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    if db.query(models.Eleccion).filter(models.Eleccion.activa == True).first():
+        raise HTTPException(status_code=400, detail="INSCRIPCIONES CERRADAS: Hay una elección en curso. No se pueden registrar más estudiantes.")
+
     registrados = 0
     omitidos = 0
     
@@ -142,6 +151,9 @@ def inscribir_texto_lote(datos: schemas.VotanteLoteRequest, request: Request, db
 
 @router.post("/inscribir-lote")
 async def inscribir_lote(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), user: models.Usuario = Depends(require_role(["admin", "secretaria"]))):
+    if db.query(models.Eleccion).filter(models.Eleccion.activa == True).first():
+        raise HTTPException(status_code=400, detail="INSCRIPCIONES CERRADAS: Hay una elección en curso. No se pueden registrar más estudiantes.")
+
     if not file.filename.endswith(('.xlsx')):
         raise HTTPException(status_code=400, detail="El archivo debe ser un Excel .xlsx")
     
