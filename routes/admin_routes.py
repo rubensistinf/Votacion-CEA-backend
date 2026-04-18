@@ -17,6 +17,12 @@ def crear_eleccion(eleccion: schemas.EleccionCreate, request: Request, db: Sessi
     db.add(db_eleccion)
     db.commit()
     db.refresh(db_eleccion)
+    
+    # Inyectar virtuales para la nueva elección
+    db.add(models.Candidato(eleccion_id=db_eleccion.id, nombre="⬜ VOTO EN BLANCO", sigla="BLANCO", cargo="—", frente="Institucional"))
+    db.add(models.Candidato(eleccion_id=db_eleccion.id, nombre="❌ VOTO NULO", sigla="NULO", cargo="—", frente="Institucional"))
+    db.commit()
+    
     log_audit(db, admin.id, "CREAR_ELECCION", f"Nombre: {db_eleccion.nombre} (ID: {db_eleccion.id})", request)
     db.commit() # Asegurar que el log se guarde
     return db_eleccion

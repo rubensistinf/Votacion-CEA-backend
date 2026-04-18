@@ -70,6 +70,29 @@ async def lifespan(app: FastAPI):
                 pass
         print("🚀 Base de datos sincronizada.")
     
+    # INYECCIÓN DE VOTO BLANCO Y NULO EN ELECCIONES (Retrospectiva)
+    from database import SessionLocal
+    import models
+    db_session = SessionLocal()
+    try:
+        elecciones = db_session.query(models.Eleccion).all()
+        for e in elecciones:
+            # Voto Blanco
+            blanco = db_session.query(models.Candidato).filter(models.Candidato.eleccion_id == e.id, models.Candidato.sigla == "BLANCO").first()
+            if not blanco:
+                db_session.add(models.Candidato(eleccion_id=e.id, nombre="⬜ VOTO EN BLANCO", sigla="BLANCO", cargo="—", frente="Institucional"))
+            
+            # Voto Nulo
+            nulo = db_session.query(models.Candidato).filter(models.Candidato.eleccion_id == e.id, models.Candidato.sigla == "NULO").first()
+            if not nulo:
+                db_session.add(models.Candidato(eleccion_id=e.id, nombre="❌ VOTO NULO", sigla="NULO", cargo="—", frente="Institucional"))
+        db_session.commit()
+        print("✅ Tarjetas de Voto Blanco/Nulo inyectadas.")
+    except Exception as exc:
+        print("Error inyectando Voto Blanco/Nulo:", exc)
+    finally:
+        db_session.close()
+    
     yield
     # Shutdown actions
 
