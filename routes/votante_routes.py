@@ -17,15 +17,27 @@ def mi_info(current_user: models.Usuario = Depends(get_current_user), db: Sessio
     if not votante:
         raise HTTPException(status_code=404, detail="Votante no encontrado")
 
-    # Buscar su asignación de mesa
+    # Buscar su asignación de mesa para votar
     asig = db.query(models.AsignacionMesa).filter(models.AsignacionMesa.votante_ci == votante.ci).first()
-    mesa_numero = asig.mesa_numero if asig else None
+    mesa_voto = asig.mesa_numero if asig else None
+    
+    # Determinar qué mesa mostramos como principal
+    mesa_principal = mesa_voto
     nombre_jefe = None
 
-    if asig:
-        jefe_rec = db.query(models.JefeMesa).filter(models.JefeMesa.mesa_id == asig.mesa_id).first()
-        if jefe_rec and jefe_rec.nombre_jefe:
+    if current_user.rol == "jefe":
+        # Extraer la mesa que controla si es Jefe
+        jefe_rec = db.query(models.JefeMesa).filter(models.JefeMesa.usuario_id == current_user.id).first()
+        if jefe_rec:
+            mesa_db = db.query(models.Mesa).filter(models.Mesa.id == jefe_rec.mesa_id).first()
+            if mesa_db:
+                mesa_principal = mesa_db.numero
             nombre_jefe = jefe_rec.nombre_jefe
+    else:
+        if asig:
+            jefe_rec = db.query(models.JefeMesa).filter(models.JefeMesa.mesa_id == asig.mesa_id).first()
+            if jefe_rec and jefe_rec.nombre_jefe:
+                nombre_jefe = jefe_rec.nombre_jefe
 
     return {
         "nombre": votante.nombre,
@@ -33,7 +45,7 @@ def mi_info(current_user: models.Usuario = Depends(get_current_user), db: Sessio
         "correo": votante.correo,
         "habilitado": votante.habilitado,
         "ha_votado": votante.ha_votado,
-        "mesa_numero": mesa_numero,
+        "mesa_numero": mesa_principal,
         "nombre_jefe": nombre_jefe
     }
 
